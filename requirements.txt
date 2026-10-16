@@ -1,0 +1,8 @@
+fastapi==0.115.*
+uvicorn[standard]==0.32.*
+python-multipart
+numpy
+scipy
+librosa>=0.10.2
+soundfile
+# opcional (IA generativa paga): pip install replicate

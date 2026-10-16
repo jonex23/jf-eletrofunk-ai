@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JF ELETROFUNK AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#000;--panel:#07060f;--line:#1c1a3a;--blue:#2f6bff;--violet:#8a3dff;--cyan:#27f0ff;--text:#e8ecff;--dim:#8d93b8}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(900px 500px at 80% -10%,#1a0a3a55,transparent),var(--bg);color:var(--text);font:400 15px/1.5 Manrope,system-ui,sans-serif}
+header{padding:28px 24px 8px;max-width:1180px;margin:auto}
+h1{font:800 clamp(26px,5vw,48px)/1 Unbounded,sans-serif;margin:0;letter-spacing:.02em;background:linear-gradient(90deg,var(--cyan),var(--blue) 45%,var(--violet));-webkit-background-clip:text;background-clip:text;color:transparent}
+header p{margin:8px 0 0;color:var(--dim)}
+main{max-width:1180px;margin:auto;padding:16px 24px 60px;display:grid;grid-template-columns:1.1fr 1fr;gap:20px}
+@media(max-width:860px){main{grid-template-columns:1fr;padding:12px}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+h2{font:600 15px Unbounded,sans-serif;margin:0 0 12px;color:var(--cyan)}
+#drop{border:1.5px dashed var(--blue);border-radius:10px;padding:22px;text-align:center;cursor:pointer;color:var(--dim)}
+#drop.on{border-color:var(--cyan);color:var(--text)}
+.stage{display:grid;grid-template-columns:120px 1fr;gap:14px;margin-top:14px}
+#cover{width:120px;height:120px;border-radius:10px;background:#0a0a18}
+canvas#viz{width:100%;height:120px;background:#03030a;border-radius:10px}
+.meter{height:8px;background:#10102a;border-radius:4px;margin-top:10px;overflow:hidden}.meter i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--violet))}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+button,select{font:600 13px Manrope,sans-serif;color:var(--text);background:#0d0c20;border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--cyan)}button:disabled{opacity:.4;cursor:not-allowed}
+button.main{background:linear-gradient(90deg,var(--blue),var(--violet));border:0}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+.sl{display:grid;grid-template-columns:1fr 46px;gap:2px 10px;margin:9px 0}.sl label{grid-column:1/-1;font-size:13px;color:var(--dim)}
+input[type=range]{width:100%;accent-color:var(--cyan)}.sl output{text-align:right;color:var(--cyan);font-variant-numeric:tabular-nums}
+#tl{width:100%;margin-top:10px}
+#status{margin-top:12px;min-height:22px;color:var(--dim)}#status.err{color:#ff6b8a}
+.bar{height:6px;background:#10102a;border-radius:3px;margin-top:6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--cyan);transition:width .3s}
+#info{color:var(--dim);font-size:13px;margin-top:8px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><h1>JF ELETROFUNK AI</h1><p>Sua música. Outra batida. Energia de Goiás.</p></header>
+<main>
+<section>
+  <h2>Estúdio</h2>
+  <div id="drop" tabindex="0" role="button">Solte uma música aqui ou toque para escolher<br><small>MP3, WAV, FLAC, M4A · só áudio que você tem autorização para usar</small></div>
+  <input id="file" type="file" accept="audio/*,.mp3,.wav,.flac,.m4a" hidden>
+  <div class="stage"><canvas id="cover" width="240" height="240"></canvas><canvas id="viz" width="600" height="240"></canvas></div>
+  <div class="meter" title="Medidor de graves"><i id="bass"></i></div>
+  <input id="tl" type="range" min="0" max="1000" value="0" aria-label="Linha do tempo">
+  <div class="row"><button id="po" disabled>REPRODUZIR ORIGINAL</button><button id="pr" disabled>REPRODUZIR REMIX</button><button id="cmp" disabled>COMPARAR ÁUDIOS</button></div>
+  <div class="row"><select id="fmt"><option value="wav">WAV</option><option value="mp3">MP3</option></select><button id="dl" disabled>BAIXAR MÚSICA</button></div>
+  <div id="status"></div><div class="bar"><i id="prog"></i></div><div id="info"></div>
+</section>
+<section>
+  <h2>Estilo e controles</h2>
+  <select id="preset" aria-label="Estilo"></select>
+  <div id="sliders"></div>
+  <label class="row" id="genrow" hidden><input type="checkbox" id="gen"> Camada de IA generativa (API paga configurada)</label>
+  <div class="row"><button id="an" disabled>ANALISAR MÚSICA</button><button id="go" class="main" disabled>TRANSFORMAR EM ELETROFUNK</button><button id="re" disabled>GERAR NOVA VERSÃO</button></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const SL=[["bass","Intensidade do grave",0,100],["beat","Força da batida",0,100],["synth","Agressividade dos synths",0,100],["bpm","Velocidade (BPM)",80,180],["fx","Intensidade dos efeitos",0,100],["melody","Preservação da melodia original",0,100],["vocal","Preservação dos vocais",0,100],["drop","Energia do drop",0,100]];
+let cfg,file,jobId=null,done=false,active=null,seed=0,anaInfo=null;
+const A={o:new Audio(),r:new Audio()};A.o.crossOrigin=A.r.crossOrigin="anonymous";
+const say=(m,e)=>{$("status").textContent=m;$("status").className=e?"err":""};
+SL.forEach(([k,l,a,b])=>{$("sliders").insertAdjacentHTML("beforeend",`<div class="sl"><label for="s_${k}">${l}</label><input id="s_${k}" type="range" min="${a}" max="${b}" value="${a==80?130:50}"><output id="o_${k}"></output></div>`);
+ const s=$("s_"+k);s.oninput=()=>$("o_"+k).textContent=s.value;s.oninput()});
+fetch("/api/config").then(r=>r.json()).then(c=>{cfg=c;$("genrow").hidden=!c.generative;if(!c.ffmpeg)say("Servidor sem ffmpeg: não será possível ler arquivos de áudio. Veja o README.",1);
+ for(const[k,v]of Object.entries(c.presets))$("preset").add(new Option(v.label,k));applyPreset()});
+function applyPreset(){const p=cfg.presets[$("preset").value];SL.forEach(([k])=>{if(k=="bpm"&&!p.bpm)return;$("s_"+k).value=p[k]??p.bpm;$("s_"+k).oninput()})}
+$("preset").onchange=applyPreset;
+const params=()=>{const o={style:cfg.presets[$("preset").value].style,seed,use_generative:$("gen").checked};SL.forEach(([k])=>o[k]=+$("s_"+k).value);return o};
+// arquivo
+const pick=f=>{if(!f)return;file=f;jobId=null;done=false;$("drop").classList.add("on");$("drop").firstChild.textContent=f.name;
+ ["an","go"].forEach(i=>$(i).disabled=false);["re","pr","cmp","dl"].forEach(i=>$(i).disabled=true);A.o.src=URL.createObjectURL(f);$("po").disabled=false;say("Arquivo pronto. Analise ou transforme.")};
+$("drop").onclick=()=>$("file").click();$("drop").onkeydown=e=>e.key=="Enter"&&$("file").click();
+$("file").onchange=e=>pick(e.target.files[0]);
+$("drop").ondragover=e=>e.preventDefault();$("drop").ondrop=e=>{e.preventDefault();pick(e.dataTransfer.files[0])};
+const err=async r=>{let m="Erro inesperado.";try{m=(await r.json()).detail||m}catch{}throw new Error(m)};
+$("an").onclick=async()=>{if(file.size>cfg.max_mb<<20)return say(`Arquivo maior que ${cfg.max_mb} MB.`,1);
+ say("Analisando…");const fd=new FormData();fd.append("file",file);
+ try{const r=await fetch("/api/analyze",{method:"POST",body:fd});if(!r.ok)await err(r);const d=await r.json();jobId=d.job_id;anaInfo=d;
+  $("info").textContent=`Original: ${d.bpm} BPM · tom ${d.key} ${d.mode} · ${d.duration}s`;say("Análise concluída.");art(d)}catch(e){say(e.message,1)}};
+async function run(){if(file.size>cfg.max_mb<<20)return say(`Arquivo maior que ${cfg.max_mb} MB.`,1);
+ ["go","re","an"].forEach(i=>$(i).disabled=true);$("prog").style.width="2%";say("Enviando…");
+ const fd=new FormData();fd.append("file",file);fd.append("params",JSON.stringify(params()));if(jobId)fd.append("job_id",jobId);
+ try{const r=await fetch("/api/jobs",{method:"POST",body:fd});if(!r.ok)await err(r);jobId=(await r.json()).job_id;
+  for(;;){await new Promise(s=>setTimeout(s,1000));const j=await(await fetch("/api/jobs/"+jobId)).json();
+   $("prog").style.width=Math.round((j.progress||0)*100)+"%";say(j.msg||"");
+   if(j.status=="error")throw new Error(j.error);
+   if(j.status=="done"){const i=j.info;$("info").textContent=`Remix: ${i.target_bpm} BPM · estilo ${i.style} · tom ${i.key} ${i.mode}${i.generative?" · +IA generativa":""}${i.warning?" · ⚠ "+i.warning:""}`;
+    A.o.src=`/api/jobs/${jobId}/audio/original`;A.r.src=`/api/jobs/${jobId}/audio/remix?t=${Date.now()}`;done=true;
+    ["pr","cmp","dl","re"].forEach(i=>$(i).disabled=false);say("Pronto. Ouça, compare e baixe.");art(i);break}}
+ }catch(e){say(e.message,1)}finally{["go","an"].forEach(i=>$(i).disabled=false);if(done)$("re").disabled=false}}
+$("go").onclick=()=>{seed=0;run()};$("re").onclick=()=>{seed=Math.floor(Math.random()*1e6);run()};
+// player + visualizador (Web Audio)
+let ctx,an,data;
+function setup(){if(ctx)return;ctx=new AudioContext();an=ctx.createAnalyser();an.fftSize=256;data=new Uint8Array(an.frequencyBinCount);
+ for(const a of[A.o,A.r]){const s=ctx.createMediaElementSource(a);s.connect(an)}an.connect(ctx.destination);draw()}
+function play(k){setup();ctx.resume();const t=active?A[active].currentTime:0;for(const a of Object.values(A))a.pause();active=k;A[k].currentTime=t;A[k].play();
+ $("po").textContent=k=="o"?"REPRODUZIR ORIGINAL ●":"REPRODUZIR ORIGINAL";$("pr").textContent=k=="r"?"REPRODUZIR REMIX ●":"REPRODUZIR REMIX"}
+$("po").onclick=()=>play("o");$("pr").onclick=()=>play("r");$("cmp").onclick=()=>play(active=="r"?"o":"r");
+$("dl").onclick=()=>{location.href=`/api/jobs/${jobId}/audio/remix?fmt=${$("fmt").value}&dl=1`};
+$("tl").oninput=e=>{if(active)A[active].currentTime=A[active].duration*e.target.value/1000};
+const v=$("viz"),vc=v.getContext("2d");
+function draw(){requestAnimationFrame(draw);an.getByteFrequencyData(data);vc.clearRect(0,0,v.width,v.height);
+ const n=data.length,w=v.width/n;for(let i=0;i<n;i++){const h=data[i]/255*v.height;const g=vc.createLinearGradient(0,v.height,0,0);g.addColorStop(0,"#2f6bff");g.addColorStop(1,"#27f0ff");vc.fillStyle=g;vc.fillRect(i*w+1,v.height-h,w-2,h)}
+ let b=0;for(let i=0;i<6;i++)b+=data[i];$("bass").style.width=Math.min(100,b/6/255*115)+"%";
+ if(active&&A[active].duration)$("tl").value=A[active].currentTime/A[active].duration*1000}
+// capa gerada a partir da análise
+function art(d){const c=$("cover").getContext("2d"),h=(d.root??0)*30;c.fillStyle="#05050f";c.fillRect(0,0,240,240);
+ for(let i=0;i<14;i++){const r=20+i*9;c.strokeStyle=`hsl(${(h+200+i*8)%360} 100% 60% / ${.9-i*.05})`;c.lineWidth=2;c.beginPath();
+  for(let a=0;a<=6.3;a+=.05){const k=r+Math.sin(a*(3+(d.bpm||120)/40)+i)*(4+i);c[a?"lineTo":"moveTo"](120+Math.cos(a)*k,120+Math.sin(a)*k)}c.stroke()}
+ c.fillStyle="#fff";c.font="800 16px Unbounded,sans-serif";c.fillText("JF",14,28)}
+art({root:9,bpm:130});
+</script></body></html>

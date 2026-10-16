@@ -1,0 +1,14 @@
+# Render (Blueprint). Usa Docker porque o ffmpeg não vem no runtime Python nativo.
+services:
+  - type: web
+    name: jf-eletrofunk-ai
+    runtime: docker
+    plan: starter        # o plano free tem pouca CPU/RAM e pode estourar o tempo em músicas longas
+    healthCheckPath: /api/health
+    envVars:
+      - key: MAX_UPLOAD_MB
+        value: "30"
+      - key: JOB_TTL_MIN
+        value: "30"
+      - key: REPLICATE_API_TOKEN   # opcional (IA generativa paga); deixe vazio para desligar
+        sync: false
